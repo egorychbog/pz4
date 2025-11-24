@@ -67,3 +67,88 @@ Todo.SampleApp (либо через обозреватель решений до
 ![Todo.SampleApp](assets/4.png)  
 
 Todo.Core.Tests (либо через обозреватель решений добавить ссылку на Todo.Core):  
+![Todo.Core.Tests](assets/5.png)  
+
+Далее реализуйте ранее созданные классы:  
+TodoItem.cs:  
+```csharp
+namespace Todo.Core
+{
+ public class TodoItem
+ {
+ public Guid Id { get; } = Guid.NewGuid();
+ public string Title { get; private set; }
+ public bool IsDone { get; private set; }
+ public TodoItem(string title)
+ {
+ Title = title?.Trim() ?? throw new ArgumentNullException(nameof(title));
+ }
+ public void MarkDone() => IsDone = true;
+ public void MarkUndone() => IsDone = false;
+ public void Rename(string newTitle)
+ {
+ if (string.IsNullOrWhiteSpace(newTitle))
+ {
+ throw new ArgumentException("Title is required", nameof(newTitle));
+ }
+ Title = newTitle.Trim();
+ }
+ }
+}
+```    
+TodoList.cs:
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+namespace Todo.Core
+{
+ public class TodoList
+ {
+ private readonly List<TodoItem> items = new();
+ public IReadOnlyList<TodoItem> Items => items.AsReadOnly();
+ public TodoItem Add(string title)
+ {
+ TodoItem item = new(title);
+ this.items.Add(item);
+ return item;
+ }
+ public bool Remove(Guid id)
+ {
+ return this.items.RemoveAll(i => i.Id == id) > 0;
+ }
+ public IEnumerable<TodoItem> Find(string substring)
+ {
+ return this.items.Where(i =>
+ i.Title.Contains(substring ?? string.Empty,
+StringComparison.OrdinalIgnoreCase));
+ }
+ public int Count => this.items.Count;
+ }
+}
+```  
+TodoListTests.cs:
+```csharp
+namespace Todo.Core.Tests
+{
+ public class TodoListTests
+ {
+ [Fact]
+ public void AddIncrementsCount()
+ {
+ var list = new TodoList();
+ _ = list.Add("task");
+ Assert.Equal(1, list.Count);
+ }
+ [Fact]
+ public void RemoveByIdWorks()
+ {
+ var list = new TodoList();
+ var i = list.Add("a");
+ Assert.True(list.Remove(i.Id));
+ }
+ }
+}
+```  
