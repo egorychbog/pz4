@@ -368,6 +368,42 @@ jobs:
  build-strict.log
  test-strict.log
  ```
- 
+
  Пояснение:  
+1. on:
+
+```yml
+on:
+ push:
+ branches: [ master ]
+ pull_request:
+ branches: [ master ]
+ ```
+
+ Триггеры запуска:
+
+- push в master — при прямом коммите в главную ветку.
+- pull_request в master — при создании/обновлении PR.
+Таким образом, анализ запускается и на PR, и на коммитах в основную ветку.
+
+2. jobs.build-and-analyze:
+
+```yml
+jobs:
+ build-and-analyze:
+ runs-on: ubuntu-latest
+ ```
+
+ Определяет джоб (job = набор шагов)
+ Запускается на виртуальной машине GitHub с Ubuntu (ubuntu-latest).
+
+3. Checkout
+
+```yml
+- name: Checkout
+ uses: actions/checkout@v4
+ ```
+
+ Скачивает код репозитория в раннер. Без этого GitHub Actions ничего не увидит.
+ 4. Setup .NET
 
