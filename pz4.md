@@ -9,9 +9,9 @@
 артефактами (DLL, symbols, readme). Пакет предназначен для распространения и управления
 зависимостями между проектами.  
   
-Таблица сравнения  
-|**Характеристика**|**Обычная сборка (DLL)**|**NuGet-пакет (.nupkg)**|
+Таблица сравнения
 
+|**Характеристика**|**Обычная сборка (DLL)**|**NuGet-пакет (.nupkg)**|
 |---|---|---|
 |Содержимое |Один или несколько .dll и ресурсы|.dll + метаданные (PackageId, Version,Description) + опционально symbols/readme|
 |Распространение |Передаётся вручную (копирование / подключение) |Через репозиторий (nuget.org, GitHubPackages, приватный feed) |
@@ -407,3 +407,182 @@ jobs:
  Скачивает код репозитория в раннер. Без этого GitHub Actions ничего не увидит.
 
  4. Setup .NET
+
+ ```yml
+ name: Setup .NET
+ uses: actions/setup-dotnet@v3
+ with:
+ dotnet-version: '8.0.x'
+ ```
+Устанавливает .NET SDK версии 8.0 (актуальная для вашего проекта).
+
+Без этого команды dotnet build/test не будут работать. 
+5. Кэш NuGet
+
+```yml
+- name: Cache NuGet packages
+ uses: actions/cache@v4
+ with:
+ path: ~/.nuget/packages
+ key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+ restore-keys: |
+ ${{ runner.os }}-nuget
+ ```
+
+ Оптимизация: кэширует скачанные NuGet-пакеты.  
+
+ **~/.nuget/packages** — стандартный путь, где dotnet хранит пакеты.  
+
+ **key** зависит от хэша .csproj, чтобы кэш обновлялся, если зависимости изменятся
+
+ 6. Restore  
+
+```yml
+ e: Restore
+ run: dotnet restore
+```
+Восстанавливает все зависимости NuGet.  
+
+7 Build & Test (baseline)
+
+```yml
+- name: Build & Test (baseline)
+ run: |
+ # Используем базовый набор правил
+ cp .editorconfig.base .editorconfig
+ echo "=== BUILD (base rules) ==="
+ dotnet build --no-restore -c Release | tee build-base.log || true
+ dotnet test --no-build -c Release | tee test-base.log || true
+ ```
+ В этой части:
+
+ Подключается мягкий набор правил (.editorconfig.base).
+
+- Выполняется dotnet build и dotnet test с этим конфигом.
+
+- tee build-base.log — сохраняет вывод в лог-файл и показывает его в консоли.
+
+- || true — делает шаг невалидационным (даже если есть ошибки). То есть build может
+
+упасть, но workflow всё равно пойдёт дальше → чтобы можно было зафиксировать ошибки для
+анализа, а не сразу обрывать CI.
+
+Результаты сохраняются в:build-base.log и test-base.log  
+
+8. Upload base analysis logs
+
+```yml
+- name: Upload base analysis logs
+ uses: actions/upload-artifact@v4
+ with:
+ name: analysis-base-logs
+ path: |
+ build-base.log
+ test-base.log
+ ```  
+ Загружает полученные логи как артефакты CI.  
+
+ 9. Build & Test (strict)  
+
+ ```yml
+ - name: Build & Test (strict)
+ run: |
+ # Используем строгий набор правил
+ cp .editorconfig.strict .editorconfig
+ echo "=== BUILD (strict rules) ==="
+ dotnet build --no-restore -c Release | tee build-strict.log || true
+ dotnet test --no-build -c Release | tee test-strict.log || true
+```
+
+Повторяем сборку и тесты, но уже со строгим набором правил (.editorconfig.strict). Сборка фактически должна упасть, если код не соответствует правилам.  
+Здесь снова стоит || true, поэтому workflow не падает, а просто фиксирует результат в логах.  
+Для строго набора правил можно убрать || true, чтобы workflow падал, и во время пулреквеста не пропускался некачественный код.  
+
+10. Upload strict analysis logs
+
+```yml
+ name: Upload strict analysis logs
+ uses: actions/upload-artifact@v4
+ with:
+ name: analysis-strict-logs
+ path: |
+ build-strict.log
+ test-strict.log
+ ```
+
+ Аналогично базовому шагу, сохраняются логи **строгой проверки**. 
+
+ В итоге workflow:  
+
+ 1. **Собирает проект и запускает тесты в двух режимах анализа**:
+- base — мягкие правила, больше подсказок и предупреждений.
+- strict — строгие правила, ошибки анализаторов.
+2. **Не прерывает CI** (|| true), а собирает все логи.
+3. **Загружает артефакты** с результатами обоих прогонов, чтобы можно было проверить
+качество кода и соблюдение правил.  
+
+При отправке изменений в github репозиторий на вкладке Actions по данному workflow
+будет общая информация, информация об ошибкой в коде (если они есть) и артефакты:  
+
+![общая инфа](assets/18.png)  
+
+Далее измените набор строгих правил в editorconfig.strict (чтобы убрать ошибки):  
+
+```
+root = true
+[*.cs]
+dotnet_analyzer_diagnostic.severity = error
+# Имена — предупреждение
+dotnet_diagnostic.SA1300.severity = warning # Element should begin with upper-case letter
+dotnet_diagnostic.SA1310.severity = warning # Field names should not contain underscores
+# Документация — suggestion
+dotnet_diagnostic.SA1600.severity = suggestion # Elements must be documented(XML-comments)
+# Несколько типов в файле — ошибка
+dotnet_diagnostic.SA1402.severity = error # File may only contain a single type
+# Разрешаем var
+dotnet_diagnostic.IDE0007.severity = none # Use implicit type
+dotnet_diagnostic.IDE0008.severity = none # Use explicit type
+# Разрешаем expression-bodied методы
+dotnet_diagnostic.IDE0022.severity = none # Use expression body for methods
+# Разрешаем new()
+dotnet_diagnostic.IDE0090.severity = none # Simplify new()
+dotnet_diagnostic.SA1000.severity = none # Spacing around keywords
+dotnet_diagnostic.SA1200.severity = none # Using must be inside namespace
+# Не требовать this.
+dotnet_diagnostic.SA1101.severity = none # Prefix local calls with this
+dotnet_diagnostic.IDE0003.severity = none # Remove 'this.' qualifier
+dotnet_diagnostic.IDE0009.severity = warning # Add 'this.' qualifier
+dotnet_diagnostic.SA1516.severity = none # Elements should be separated by blank line
+dotnet_diagnostic.SA1201.severity = none # Elements should be ordered by access
+dotnet_diagnostic.IDE0005.severity = none # Remove unnecessary usings
+dotnet_diagnostic.IDE0028.severity = none # Collection initialization can be simplified
+dotnet_diagnostic.IDE0290.severity = warning # Primary constructor
+dotnet_diagnostic.SA1636.severity = suggestion # File header text should match settings
+# Стиль отступов (4 пробела на уровень)
+indent_style = space
+indent_size = 4
+```
+
+В итоге:
+| **Правило / Диагностика**| **Назначение**|**Уровень**|
+|---|---|---|
+| dotnet_analyzer_diagnostic.severity|Все диагностики по умолчанию|**error**|
+| SA1402| Один файл = один тип|**error**|
+| SA1300| Имя должно начинаться с заглавной буквы|**warning**|
+| SA1310| Поля не должны содержать _|**warning**|
+| IDE0009| Добавить this.|**warning**|
+| IDE0290| Использовать primary constructor (C# 12)| **warning**|
+| SA1600| Требуется XML-документация |**suggestion**|
+| SA1636| Copyright header должен совпадать с настройками|**suggestion**|
+| IDE0007| Использовать var|**none**|
+| IDE0008| Использовать явный тип вместо var |**none**|
+| IDE0022| Разрешить expression-bodied методы|**none**|
+| IDE0090| Упрощать new()|**none**|
+| SA1000| Пробелы после new|**none**|
+| SA1200| using внутри namespace|**none**|
+| SA1101| Требовать this.|**none**|
+| IDE0003| Удалить this.|**none**|
+| SA1516| Пустые строки между элементами|**none**|
+| SA1201| Порядок членов класса (public/private) |**none**|
+| IDE0005| Удалять неиспользуемые using|**none**|
+| IDE0028| Упрощение инициализации коллекций|**none**|
