@@ -209,5 +209,31 @@ indent_size = 4
 
 **Как тонко настраивать правила (примеры )**  
 
-Сделать конкретное правило warning: 
-``
+Сделать конкретное правило warning:
+`dotnet_diagnostic.SA1300.severity = warning`  
+
+Отключить правило:  
+`dotnet_diagnostic.SA1600.severity = none`  
+
+Настроить Roslyn rule (например, IDE0003):  
+`dotnet_diagnostic.IDE0003.severity = suggestion`  
+
+**Как временно подавить правило в коде (если нужно)**  
+В конкретном месте:  
+```
+#pragma warning disable SA1101  
+// код вызывающий правило
+```  
+
+Для целого проекта (csproj):  
+```
+ropertyGroup>
+ <NoWarn>SA1101;SA1633</NoWarn>
+</PropertyGroup> 
+```
+Для целого проекта (csproj):
+```
+<PropertyGroup>
+ <NoWarn>SA1101;SA1633</NoWarn>
+</PropertyGroup>  
+```
