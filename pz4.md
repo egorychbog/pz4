@@ -152,3 +152,62 @@ namespace Todo.Core.Tests
  }
 }
 ```  
+Следующим этапом является реализация .editconfig файлов.  
+
+.editorconfig — основной инструмент управления диагностикой в .NET (IDE и компилятор
+читают его). Через него вы задаёте уровни severity (suggestion / warning / error / none) для любых
+диагностиок: IDExxx, CAxxxx, SAxxxx, Sxxxx и т.д. У нас 2 файла (набора правил):  
+- .editorconfig.base — мягкий режим: подсказки/предупреждения, сборка не ломается.
+Подходит для ранней разработки и обучения;  
+-  .editorconfig.strict — жёсткий режим: многие диагностики превращены в ошибки;
+используется как gate в CI, чтобы требовать чистого кода.  
+
+.editorconfig.base:  
+```
+root = true
+[*.cs]
+# по умолчанию предупреждения
+dotnet_analyzer_diagnostic.severity = suggestion
+# выключим строгие StyleCop-правила для базового анализа
+dotnet_diagnostic.SA1300.severity = none
+dotnet_diagnostic.SA1600.severity = none
+dotnet_diagnostic.SA1402.severity = none
+# форматирование (нестрого)
+indent_style = space
+indent_size = 4
+```
+- root = true - файл считается корневым; поиск .editorconfig выше по файловой иерархии
+прекращается. 
+- [*.cs] — настройки применяются ко всем C# файлам.  
+- dotnet_analyzer_diagnostic.severity = suggestion — по умолчанию все диагностические
+правила будут отображаться как подсказки (не мешают сборке). Это удобно, чтобы разработчик
+видел рекомендации, но CI/локальная сборка не падали.
+- dotnet_diagnostic.SA1300.severity = none и т.п. — конкретные правила StyleCop
+отключены в base, чтобы они не мешали.
+- indent_style, indent_size — простые правила форматирования; IDE будет подсказывать
+форматирование, но не принуждать.
+
+.editorconfig.strict:  
+```
+root = true
+[*.cs]
+# Поднимать нарушения анализаторов как ошибки
+dotnet_analyzer_diagnostic.severity = error
+# Включим некоторые StyleCop правила как ошибки
+dotnet_diagnostic.SA1300.severity = error # Element should begin with upper-case letter
+dotnet_diagnostic.SA1600.severity = error # Elements must be documented
+dotnet_diagnostic.SA1402.severity = error # File may only contain a single type
+# правила форматирования
+indent_style = space
+indent_size = 4
+```  
+- dotnet_analyzer_diagnostic.severity = error — глобально повышает все анализаторы до
+уровня ошибки. Это жёсткая настройка: при dotnet build (или если CI ставит warnings as errors)
+сборка упадёт при любом нарушении.
+- Конкретные SAxxxx вынесены явно (SA1300, SA1600, SA1402).
+- Форматирование остаётся одинаковым.  
+
+**Как тонко настраивать правила (примеры )**  
+
+Сделать конкретное правило warning: 
+``
