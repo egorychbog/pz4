@@ -263,3 +263,111 @@ ropertyGroup>
  <NoWarn>SA1101;SA1633</NoWarn>
 </PropertyGroup>  
 ```
+
+**Как использовать (быстро) правила для анализа**  
+
+Локально. Откройте PowerShell:  
+![ОткрытиеПоверШелла](assets/6.png)  
+
+Для сборки проекта:  
+
+```
+# восстановить и собрать
+dotnet restore
+dotnet build -c Release
+dotnet test -c Release
+# собрать пакет (опционально)
+dotnet pack Todo.Core/Todo.Core.csproj -c Release -o ./artifacts
+```  
+
+Для анализа (локально можно переключать .editorconfig). Для переключения к базовому
+анализу введите:  
+
+```
+# базовый анализ
+cp .editorconfig.base .editorconfig
+dotnet build -c Release
+```  
+
+Результат:  
+![Результат](assets/7.png)  
+
+Для переключения к строгому анализу введите:
+
+```
+# строгий анализ
+cp .editorconfig.strict .editorconfig
+dotnet build -c Release 
+```  
+Результат:  
+![введенныйСтрогийАнализ](assets/8.png)
+
+В GitHub Actions workflow оба анализа выполняются автоматически и сохраняют логи в
+артефакты.  
+
+В зависимости от включенного анализа IDE будет показывать соответсвтующие ошибки,
+предупреждения и сообщения.  
+
+![ОшибкиПредупреждения](assets/9.png)  
+
+![ПредупрежденияОшибки](assets/10.png)  
+
+Следующим шагом необходимо добавить в проект .github/workflows/ci-analysis.yml  
+```yml
+name: CI / Build & Static Analysis
+on:
+ push:
+ branches: [ master ]
+ pull_request:
+ branches: [ master ]
+jobs:
+ build-and-analyze:
+ runs-on: ubuntu-latest
+ steps:
+ - name: Checkout
+ uses: actions/checkout@v4
+ - name: Setup .NET
+ uses: actions/setup-dotnet@v3
+ with:
+ dotnet-version: '8.0.x'
+ - name: Cache NuGet packages
+ uses: actions/cache@v4
+ with:
+ path: ~/.nuget/packages
+ key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+ restore-keys: |
+ ${{ runner.os }}-nuget-
+ - name: Restore
+ run: dotnet restore
+ - name: Build & Test (baseline)
+ run: |
+ # Используем базовый набор правил
+ cp .editorconfig.base .editorconfig
+ echo "=== BUILD (base rules) ==="
+ dotnet build --no-restore -c Release | tee build-base.log || true
+ dotnet test --no-build -c Release | tee test-base.log || true
+ - name: Upload base analysis logs
+ uses: actions/upload-artifact@v4
+ with:
+ name: analysis-base-logs
+ path: |
+ build-base.log
+ test-base.log
+ - name: Build & Test (strict)
+ run: |
+ # Используем строгий набор правил
+ cp .editorconfig.strict .editorconfig
+ echo "=== BUILD (strict rules) ==="
+ dotnet build --no-restore -c Release | tee build-strict.log || true
+ dotnet test --no-build -c Release | tee test-strict.log || true
+ - name: Upload strict analysis logs
+ uses: actions/upload-artifact@v4
+ with:
+ name: analysis-strict-logs
+ path: |
+ build-strict.log
+ test-strict.log
+ ```
+ 
+ Пояснение:  
+
